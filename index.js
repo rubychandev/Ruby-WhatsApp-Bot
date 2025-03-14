@@ -5,7 +5,7 @@ const fs = require('fs').promises;
 const readline = require('readline');
 const Logger = require('./utils/logger');
 
-const logger = new Logger(); // Logger kustom untuk logging manual
+const logger = new Logger();
 const configPath = './config.json';
 const whisperLimitsPath = './whisper-limits.json';
 const adminLogsPath = './admin-logs.json';
@@ -75,7 +75,8 @@ const connectToWhatsApp = async () => {
     const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys');
     const sock = makeWASocket({
         auth: state,
-        logger: pino({ level: 'silent' }) // Gunakan Pino dengan level silent untuk kecepatan
+        logger: pino({ level: 'warn' }), // Ubah ke 'warn' untuk melihat error penting
+        printQRInTerminal: false // Nonaktifkan QR, kita pakai pairing code
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -93,13 +94,25 @@ const connectToWhatsApp = async () => {
             isReady = true;
             logger.info('Bot is ready!');
         } else if (connection === 'close') {
-            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            logger.error('Disconnected:', lastDisconnect?.error);
-            if (shouldReconnect) connectToWhatsApp();
+            const reason = lastDisconnect?.error?.output?.statusCode;
+            logger.error(`Disconnected with reason: ${reason || 'Unknown'} - ${lastDisconnect?.error?.message || 'No message'}`);
+            if (reason !== DisconnectReason.loggedOut) {
+                logger.info('Attempting to reconnect...');
+                setTimeout(() => connectToWhatsApp(), 2000); // Delay 2 detik untuk menghindari loop cepat
+            } else {
+                logger.error('Logged out. Please delete auth_info_baileys and restart.');
+                process.exit(1);
+            }
+        } else if (connection === 'connecting') {
+            logger.info('Connecting to WhatsApp...');
         } else if (qr) {
-            const pairingCode = await sock.requestPairingCode(config.botNumber);
-            logger.info(`Pairing code for ${config.botNumber}: ${pairingCode}`);
-            console.log(`Open WhatsApp on your phone, go to Settings > Linked Devices > Link with Phone Number, and enter this code: ${pairingCode}`);
+            try {
+                const pairingCode = await sock.requestPairingCode(config.botNumber);
+                logger.info(`Pairing code for ${config.botNumber}: ${pairingCode}`);
+                console.log(`Open WhatsApp on your phone, go to Settings > Linked Devices > Link with Phone Number, and enter this code: ${pairingCode}`);
+            } catch (error) {
+                logger.error(`Failed to generate pairing code: ${error.message}`);
+            }
         }
     });
 
