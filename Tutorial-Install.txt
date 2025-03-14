@@ -1,0 +1,31 @@
+- UBUNTU:
+• sudo apt update && sudo apt upgrade -y
+• curl -fsSL https://deb.nodesource.co /setup_18.x | sudo -E bash -
+• sudo apt install -y nodejs
+• sudo apt install -y chromium-browser
+• cd Ruby-WhatsApp-Bot
+• npm init -y
+• npm install whatsapp-web.js image-size
+• node index.js
+
+- TERMUX:
+• pkg update && pkg upgrade -y
+• pkg install -y nodejs git termux-api
+• pkg install -y python
+• pip install puppeteer
+• cd Ruby-WhatsApp-Bot
+• npm init -y
+• npm install whatsapp-web.js image-size
+= = =
+• Edit index.js untuk Termux:
+Karena Chromium sulit di Termux, ubah konfigurasi Puppeteer untuk --no-sandbox tanpa path khusus:
+
+puppeteer: {
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+}
+
+Hapus atau komentari executablePath:
+// executablePath: process.env.CHROME_PATH || '/usr/bin/chromium-browser'
+= = =
+• node index.js
