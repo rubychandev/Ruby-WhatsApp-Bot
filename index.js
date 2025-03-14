@@ -1,10 +1,11 @@
 const { Boom } = require('@hapi/boom');
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@adiwajshing/baileys');
+const pino = require('pino');
 const fs = require('fs').promises;
 const readline = require('readline');
 const Logger = require('./utils/logger');
 
-const logger = new Logger();
+const logger = new Logger(); // Logger kustom untuk logging manual
 const configPath = './config.json';
 const whisperLimitsPath = './whisper-limits.json';
 const adminLogsPath = './admin-logs.json';
@@ -74,7 +75,7 @@ const connectToWhatsApp = async () => {
     const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys');
     const sock = makeWASocket({
         auth: state,
-        logger: { silent: true }
+        logger: pino({ level: 'silent' }) // Gunakan Pino dengan level silent untuk kecepatan
     });
 
     sock.ev.on('creds.update', saveCreds);
