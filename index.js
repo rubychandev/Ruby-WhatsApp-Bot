@@ -1,5 +1,5 @@
 const { Boom } = require('@hapi/boom');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, generateWAMessageFromContent } = require('@adiwajshing/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@adiwajshing/baileys');
 const fs = require('fs').promises;
 const readline = require('readline');
 const Logger = require('./utils/logger');
@@ -8,7 +8,7 @@ const logger = new Logger();
 const configPath = './config.json';
 const whisperLimitsPath = './whisper-limits.json';
 const adminLogsPath = './admin-logs.json';
-let config = { owner: '', admins: [], prefix: '!', mimicTargets: [], bioHistory: [], nameHistory: [], ownerMessage: '' };
+let config = { owner: '', botNumber: '', admins: [], prefix: '!', mimicTargets: [], bioHistory: [], nameHistory: [], ownerMessage: '' };
 let whisperLimits = {};
 let adminLogs = [];
 const commands = new Map();
@@ -25,6 +25,8 @@ const debounce = (func, wait) => {
 const loadConfig = async () => {
     try {
         config = JSON.parse(await fs.readFile(configPath, 'utf8')) || {};
+        config.owner = config.owner || '';
+        config.botNumber = config.botNumber || '';
         config.admins = config.admins || [];
         config.prefix = config.prefix || '!';
         config.mimicTargets = config.mimicTargets || [];
@@ -32,7 +34,7 @@ const loadConfig = async () => {
         config.nameHistory = config.nameHistory || [];
         config.ownerMessage = config.ownerMessage || '';
     } catch {
-        config = { owner: '', admins: [], prefix: '!', mimicTargets: [], bioHistory: [], nameHistory: [], ownerMessage: '' };
+        config = { owner: '', botNumber: '', admins: [], prefix: '!', mimicTargets: [], bioHistory: [], nameHistory: [], ownerMessage: '' };
         await saveConfigImmediate();
     }
 };
@@ -72,7 +74,7 @@ const connectToWhatsApp = async () => {
     const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys');
     const sock = makeWASocket({
         auth: state,
-        logger: { silent: true } // Minimize logging untuk kecepatan
+        logger: { silent: true }
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -94,8 +96,8 @@ const connectToWhatsApp = async () => {
             logger.error('Disconnected:', lastDisconnect?.error);
             if (shouldReconnect) connectToWhatsApp();
         } else if (qr) {
-            const pairingCode = await sock.requestPairingCode(config.owner);
-            logger.info(`Pairing code for ${config.owner}: ${pairingCode}`);
+            const pairingCode = await sock.requestPairingCode(config.botNumber);
+            logger.info(`Pairing code for ${config.botNumber}: ${pairingCode}`);
             console.log(`Open WhatsApp on your phone, go to Settings > Linked Devices > Link with Phone Number, and enter this code: ${pairingCode}`);
         }
     });
@@ -141,9 +143,76 @@ const connectToWhatsApp = async () => {
             }),
             reply: async (text, _, options) => sock.sendMessage(msg.key.remoteJid, { text, ...options }),
             getMentions: async () => (msg.message.extendedTextMessage?.contextInfo?.mentionedJid || []).map(id => ({ id: { _serialized: id } })),
-            hasQuotedMsg: !!msg.message.extendedTextMessage?.context 
-   
-Info: Bot is ready!
-Info: Loaded 13 commands
-Pairing code for 6281234567890: 1234-5678
-Open WhatsApp on your phone, go to Settings > Linked Devices > Link with Phone Number, and enter this code: 1234-5678
+            hasQuotedMsg: !!msg.message.extendedTextMessage?.contextInfo?.quotedMessage,
+            getQuotedMessage: async () => ({
+                hasMedia: !!msg.message.imageMessage,
+                type: msg.message.imageMessage ? 'image' : 'text',
+                message: msg.message,
+                downloadMedia: async () => msg.message.imageMessage ? { data: Buffer.from(msg.message.imageMessage.data).toString('base64') } : null
+            }),
+            ownerPresence: () => ownerPresence
+        };
+
+        if (['whisper', 'owner', 'me'].includes(commandName)) {
+            try {
+                await command.execute(sock, wrappedMsg, args, config.owner, config, whisperLimits, saveWhisperLimits);
+            } catch (error) {
+                logger.error(`Error executing ${commandName}: ${error.message}`);
+                await sock.sendMessage(msg.key.remoteJid, { text: 'An error occurred!' });
+            }
+            return;
+        }
+
+        if (!isOwner && !(isBotAdmin && isGroupAdmin)) {
+            return sock.sendMessage(msg.key.remoteJid, { text: 'Only the bot owner or bot admins who are also group admins can use this bot!' });
+        }
+
+        if (!isOwner && ['addadmin', 'removeadmin', 'setprefix', 'setpfp', 'setbio', 'setname'].includes(commandName)) {
+            return sock.sendMessage(msg.key.remoteJid, { text: 'Only the bot owner can use this command!' });
+        }
+
+        try {
+            if (isBotAdmin || isGroupAdmin) {
+                adminLogs.push({ admin: senderNumber, command: commandName, args, timestamp: new Date().toISOString() });
+                await saveAdminLogs();
+            }
+            await command.execute(sock, wrappedMsg, args, config.owner, config, saveConfig);
+        } catch (error) {
+            logger.error(`Error executing ${commandName}: ${error.message}`);
+            await sock.sendMessage(msg.key.remoteJid, { text: 'An error occurred!' });
+        }
+    });
+
+    return sock;
+};
+
+(async () => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const getOwnerNumber = () => new Promise(resolve => {
+        if (config.owner) return resolve(config.owner);
+        rl.question('Enter owner number (e.g., 6281234567890): ', async answer => {
+            config.owner = answer;
+            await saveConfigImmediate();
+            resolve(answer);
+        });
+    });
+    const getBotNumber = () => new Promise(resolve => {
+        if (config.botNumber) return resolve(config.botNumber);
+        rl.question('Enter bot number (e.g., 6289876543210): ', async answer => {
+            config.botNumber = answer;
+            await saveConfigImmediate();
+            resolve(answer);
+        });
+    });
+
+    try {
+        await Promise.all([loadConfig(), loadWhisperLimits(), loadAdminLogs()]);
+        await getOwnerNumber();
+        await getBotNumber();
+        await loadCommands();
+        await connectToWhatsApp();
+    } catch (error) {
+        logger.error(`Startup error: ${error.message}`);
+        process.exit(1);
+    }
+})();
