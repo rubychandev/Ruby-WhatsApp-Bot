@@ -1,6 +1,6 @@
 module.exports = {
     name: 'hidetag',
-    execute: async (client, msg, args) => {
+    execute: async (sock, msg, args) => {
         if (!msg.isGroup) return msg.reply('This command is only for groups!');
 
         const chat = await msg.getChat();
@@ -16,10 +16,10 @@ module.exports = {
             const [_, value, unit] = time;
             const ms = { s: 1000, m: 60000, h: 3600000 }[unit] * value;
             text = args.slice(2).join(' ');
-            setTimeout(() => chat.sendMessage(text || 'Hello everyone!', { mentions }), ms);
+            setTimeout(() => sock.sendMessage(msg.key.remoteJid, { text: text || 'Hello everyone!', mentions }), ms);
             return msg.reply(`Scheduled hidetag in ${value}${unit}!`);
         }
 
-        await chat.sendMessage(text || 'Hello everyone!', { mentions });
+        await sock.sendMessage(msg.key.remoteJid, { text: text || 'Hello everyone!', mentions });
     }
 };
