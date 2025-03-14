@@ -1,6 +1,6 @@
 module.exports = {
     name: 'mimic',
-    execute: async (client, msg, args, owner, config, saveConfig) => {
+    execute: async (sock, msg, args, owner, config, saveConfig) => {
         if (!args.length) return msg.reply('Please tag a target or use "off"! Example: !mimic @6281234567890 [keyword=word]');
 
         if (args[0].toLowerCase() === 'off') {
@@ -16,6 +16,7 @@ module.exports = {
         const keywordArg = args.find(a => a.startsWith('keyword='));
         const keyword = keywordArg ? keywordArg.split('=')[1] : null;
         const target = mentions[0].id._serialized;
+        if (config.mimicTargets.some(t => t.id === target)) return msg.reply('Target already being mimicked!');
         config.mimicTargets.push({ id: target, keyword });
         await saveConfig();
         await msg.reply(`Now mimicking ${mentions[0].id.user}${keyword ? ` (keyword: ${keyword})` : ''}! Use ${config.prefix}mimic off to stop.`);
