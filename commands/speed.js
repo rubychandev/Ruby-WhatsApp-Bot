@@ -1,8 +1,8 @@
 module.exports = {
     name: 'speed',
-    execute: async (client, msg) => {
+    execute: async (sock, msg) => {
         const start = performance.now();
-        const testMsg = await msg.reply('Testing...');
+        const testMsg = await sock.sendMessage(msg.key.remoteJid, { text: 'Testing...' });
         const apiLatency = performance.now() - start;
 
         const ioStart = performance.now();
@@ -10,6 +10,9 @@ module.exports = {
         const ioLatency = performance.now() - ioStart;
 
         const totalLatency = apiLatency + ioLatency;
-        await testMsg.edit(`Bot Speed:\n- API Latency: ${apiLatency.toFixed(2)}ms\n- I/O Latency: ${ioLatency.toFixed(2)}ms\n- Total: ${totalLatency.toFixed(2)}ms`);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `Bot Speed:\n- API Latency: ${apiLatency.toFixed(2)}ms\n- I/O Latency: ${ioLatency.toFixed(2)}ms\n- Total: ${totalLatency.toFixed(2)}ms`,
+            quoted: testMsg
+        });
     }
 };
