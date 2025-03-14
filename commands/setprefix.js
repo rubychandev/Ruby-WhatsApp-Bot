@@ -1,6 +1,6 @@
 module.exports = {
     name: 'setprefix',
-    execute: async (client, msg, args, owner, config, saveConfig) => {
+    execute: async (sock, msg, args, owner, config, saveConfig) => {
         if (!args[0]) return msg.reply('Provide a new prefix or "reset"! Example: !setprefix #');
 
         if (args[0].toLowerCase() === 'reset') {
