@@ -1,6 +1,6 @@
 module.exports = {
     name: 'addadmin',
-    execute: async (client, msg, args, owner, config, saveConfig) => {
+    execute: async (sock, msg, args, owner, config, saveConfig) => {
         if (!args[0]) return msg.reply('Enter a number! Example: !addadmin 6281234567890 [24h]');
 
         const number = args[0].replace(/[^0-9]/g, '');
