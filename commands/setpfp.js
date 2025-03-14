@@ -1,25 +1,19 @@
-const { MessageMedia } = require('whatsapp-web.js');
-const sizeOf = require('image-size');
+const sharp = require('sharp');
 
 module.exports = {
     name: 'setpfp',
-    execute: async (client, msg, args, owner, config, saveConfig) => {
-        if (!msg.hasQuotedMsg) return msg.reply('Reply to an HD image (minimum 512x512 pixels)!');
+    execute: async (sock, msg) => {
+        if (!msg.hasQuotedMsg) return msg.reply('Reply to an image to set as profile picture!');
 
-        const quotedMsg = await msg.getQuotedMessage();
-        if (!quotedMsg.hasMedia || quotedMsg.type !== 'image') return msg.reply('The replied message must be an image!');
+        const quoted = await msg.getQuotedMessage();
+        if (!quoted.hasMedia || !quoted.message.imageMessage) return msg.reply('The replied message must be an image!');
 
-        const media = await quotedMsg.downloadMedia();
-        const buffer = Buffer.from(media.data, 'base64');
-        const { width, height } = sizeOf(buffer);
-        if (width < 512 || height < 512) return msg.reply('Image must be HD (minimum 512x512 pixels)!');
+        const media = quoted.message.imageMessage;
+        const buffer = Buffer.from(media.data, 'base64'); // Baileys sudah menyediakan data base64
+        const { width, height } = await sharp(buffer).metadata();
+        if (width < 512 || height < 512) return msg.reply('Image must be at least 512x512 pixels!');
 
-        const previewMsg = await msg.reply('Preview of new profile picture:', null, { media });
-        await msg.reply('Reply "yes" to confirm or "no" to cancel.');
-        const response = await new Promise(resolve => client.once('message', m => m.from === msg.from && resolve(m.body.toLowerCase())));
-        if (response !== 'yes') return msg.reply('Profile picture update canceled.');
-
-        await client.setProfilePicture(media);
-        await msg.reply('Profile picture updated successfully!');
+        await sock.sendMessage(`${config.owner}@s.whatsapp.net`, { image: media, caption: 'Please set this as bot profile picture manually via WhatsApp settings.' });
+        await msg.reply('Image sent to owner for manual profile picture update.');
     }
 };
